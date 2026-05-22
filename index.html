@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Avatar</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0e14;
+      --surface: #14161f;
+      --surface2: #1c1f2e;
+      --border: #2a2d3e;
+      --accent: #6c63ff;
+      --accent2: #a78bfa;
+      --green: #4ade80;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --text: #e2e8f0;
+      --text-dim: #94a3b8;
+      --text-faint: #475569;
+      --avatar-skin: #fcd5b0;
+      --avatar-skin-dark: #f0b88a;
+      --avatar-eye: #2d3748;
+      --avatar-iris: #6c63ff;
+      --avatar-mouth: #e07070;
+      --avatar-hair: #2d1b10;
+      --avatar-blush: rgba(248,113,113,0.25);
+      --radius: 16px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────────────── */
+    .sidebar {
+      width: 340px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar header ───────────────────────────────────────────────────── */
+    .sidebar-header {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sidebar-header h1 .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text-faint);
+      transition: background 0.4s;
+    }
+    .sidebar-header h1 .dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .sidebar-header h1 .dot.error     { background: var(--red); }
+    .sidebar-header p {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* ── Chat history ─────────────────────────────────────────────────────── */
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+    }
+    .chat-history::-webkit-scrollbar { width: 4px; }
+    .chat-history::-webkit-scrollbar-track { background: transparent; }
+    .chat-history::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .msg {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      max-width: 100%;
+    }
+    .msg.user { align-items: flex-end; }
+    .msg.assistant { align-items: flex-start; }
+
+    .msg-label {
+      font-size: 10px;
+      color: var(--text-faint);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .msg-bubble {
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 90%;
+    }
+    .msg.user .msg-bubble {
+      background: var(--accent);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .msg.assistant .msg-bubble {
+      background: var(--surface2);
+      color: var(--text);
+      border-bottom-left-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    /* streaming cursor */
+    .msg-bubble.streaming::after {
+      content: '▋';
+      display: inline-block;
+      animation: blink-cursor 0.8s step-end infinite;
+      color: var(--accent2);
+      margin-left: 2px;
+    }
+    @keyframes blink-cursor {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+
+    /* ── Input area ───────────────────────────────────────────────────────── */
+    .input-area {
+      padding: 14px 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .text-input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 10px 14px;
+      resize: none;
+      outline: none;
+      font-family: inherit;
+      line-height: 1.5;
+      min-height: 44px;
+      max-height: 100px;
+      transition: border-color 0.2s;
+    }
+    .text-input:focus { border-color: var(--accent); }
+    .text-input::placeholder { color: var(--text-faint); }
+
+    .icon-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text-dim);
+      cursor: pointer;
+      width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+      flex-shrink: 0;
+    }
+    .icon-btn:hover { background: var(--border); color: var(--text); }
+    .icon-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .icon-btn.danger { background: var(--red); border-color: var(--red); color: #fff; }
+
+    .send-btn {
+      background: var(--accent);
+      border: none;
+      border-radius: 12px;
+      color: #fff;
+      cursor: pointer;
+      width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+      transition: opacity 0.2s;
+    }
+    .send-btn:hover { opacity: 0.85; }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* STT status bar */
+    .stt-bar {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-dim);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 12px;
+    }
+    .stt-bar.active { display: flex; }
+    .stt-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      animation: stt-pulse 1s ease-in-out infinite;
+    }
+    @keyframes stt-pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%       { transform: scale(1.4); opacity: 0.7; }
+    }
+    .stt-text { flex: 1; font-style: italic; color: var(--text); }
+
+    /* ── Avatar stage ─────────────────────────────────────────────────────── */
+    .avatar-stage {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .avatar-glow {
+      position: relative;
+      border-radius: 50%;
+      padding: 6px;
+      background: var(--surface);
+      box-shadow: 0 0 0 2px var(--border);
+      transition: box-shadow 0.4s;
+    }
+    .avatar-glow.listening { box-shadow: 0 0 0 3px var(--green), 0 0 24px rgba(74,222,128,0.3); }
+    .avatar-glow.thinking  { box-shadow: 0 0 0 3px var(--yellow), 0 0 24px rgba(251,191,36,0.3); }
+    .avatar-glow.speaking  { box-shadow: 0 0 0 3px var(--accent), 0 0 24px rgba(108,99,255,0.4); }
+    .avatar-glow.happy     { box-shadow: 0 0 0 3px var(--green), 0 0 30px rgba(74,222,128,0.4); }
+    .avatar-glow.error     { box-shadow: 0 0 0 3px var(--red), 0 0 20px rgba(248,113,113,0.3); }
+
+    .avatar-svg { width: 220px; height: 220px; border-radius: 50%; }
+
+    /* ── State label ──────────────────────────────────────────────────────── */
+    .state-label {
+      font-size: 13px;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+      text-transform: capitalize;
+      height: 20px;
+      transition: color 0.3s;
+    }
+    .state-label.listening { color: var(--green); }
+    .state-label.thinking  { color: var(--yellow); }
+    .state-label.speaking  { color: var(--accent2); }
+
+    /* ── Current speech display (live streaming text) ─────────────────────── */
+    .speech-display {
+      max-width: 520px;
+      text-align: center;
+      min-height: 60px;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--text);
+      padding: 0 24px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    .speech-display.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── Control buttons under avatar ─────────────────────────────────────── */
+    .avatar-controls {
+      display: flex;
+      gap: 12px;
+    }
+
+    .ctrl-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      color: var(--text-dim);
+      cursor: pointer;
+      padding: 10px 20px;
+      font-size: 13px;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s, color 0.2s;
+    }
+    .ctrl-btn:hover { background: var(--surface2); color: var(--text); }
+    .ctrl-btn.record-btn { background: var(--surface2); }
+    .ctrl-btn.record-btn.active { background: var(--red); border-color: var(--red); color: #fff; }
+
+    /* ── Click-to-begin overlay ───────────────────────────────────────────── */
+    .start-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(13,14,20,0.92);
+      backdrop-filter: blur(6px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      z-index: 999;
+      transition: opacity 0.4s;
+    }
+    .start-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .start-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 50px;
+      padding: 16px 40px;
+      font-size: 18px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 0 32px rgba(108,99,255,0.5);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .start-btn:hover {
+      transform: scale(1.04);
+      box-shadow: 0 0 48px rgba(108,99,255,0.7);
+    }
+    .start-overlay p {
+      color: var(--text-dim);
+      font-size: 14px;
+    }
+
+    /* ── Always-listening mode ────────────────────────────────────────────── */
+    .always-on-ring {
+      position: absolute;
+      inset: -10px;
+      border-radius: 50%;
+      border: 2px solid var(--green);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.6s;
+    }
+    .avatar-glow.always-on .always-on-ring {
+      opacity: 0.35;
+      animation: wake-ring-pulse 3s ease-in-out infinite;
+    }
+    @keyframes wake-ring-pulse {
+      0%, 100% { opacity: 0.35; transform: scale(1); }
+      50%       { opacity: 0.12; transform: scale(1.05); }
+    }
+    .ctrl-btn.always-btn.active {
+      background: rgba(74,222,128,0.12);
+      border-color: var(--green);
+      color: var(--green);
+    }
+    @keyframes wake-flash-anim {
+      0%   { box-shadow: 0 0 0 4px var(--green), 0 0 48px rgba(74,222,128,0.7); }
+      100% { box-shadow: 0 0 0 3px var(--green), 0 0 24px rgba(74,222,128,0.3); }
+    }
+    .wake-flash { animation: wake-flash-anim 0.5s ease-out forwards; }
+
+    /* ── Avatar SVG animations ────────────────────────────────────────────── */
+
+    /* Blink — always on */
+    @keyframes blink {
+      0%, 94%, 100% { transform: scaleY(1); }
+      96%            { transform: scaleY(0.05); }
+    }
+    .eye-upper-lid { animation: blink 4s ease-in-out infinite; transform-origin: center center; }
+
+    /* Mouth speaking */
+    @keyframes mouth-speak {
+      0%, 100% { d: path("M 85 145 Q 110 160 135 145"); }
+      25%       { d: path("M 85 145 Q 110 168 135 145"); }
+      50%       { d: path("M 85 145 Q 110 155 135 145"); }
+      75%       { d: path("M 85 145 Q 110 170 135 145"); }
+    }
+    .avatar-mouth.speaking { animation: mouth-speak 0.25s ease-in-out infinite; }
+
+    /* Iris wander — thinking */
+    @keyframes iris-wander {
+      0%   { transform: translate(0px,   0px);  }
+      25%  { transform: translate(3px,  -2px);  }
+      50%  { transform: translate(-2px,  2px);  }
+      75%  { transform: translate(2px,   3px);  }
+      100% { transform: translate(0px,   0px);  }
+    }
+    .iris.thinking { animation: iris-wander 2s ease-in-out infinite; }
+
+    /* Listening pulse on avatar */
+    @keyframes listen-glow {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.6; }
+    }
+    .avatar-face.listening { animation: listen-glow 1.2s ease-in-out infinite; }
+
+    /* Happy — raise cheeks */
+    .cheek { opacity: 0; transition: opacity 0.4s; }
+    .avatar-face.happy .cheek { opacity: 1; }
+
+    /* Eyebrows */
+    .eyebrow { transition: transform 0.4s ease; }
+    .avatar-face.thinking .eyebrow-left  { transform: rotate(-8deg) translateY(-4px); transform-origin: center; }
+    .avatar-face.thinking .eyebrow-right { transform: rotate(8deg)  translateY(-4px); transform-origin: center; }
+    .avatar-face.happy .eyebrow-left     { transform: rotate(-4deg) translateY(-3px); transform-origin: center; }
+    .avatar-face.happy .eyebrow-right    { transform: rotate(4deg)  translateY(-3px); transform-origin: center; }
+    .avatar-face.error .eyebrow-left     { transform: rotate(10deg) translateY(-2px); transform-origin: center; }
+    .avatar-face.error .eyebrow-right    { transform: rotate(-10deg) translateY(-2px); transform-origin: center; }
+
+    /* Smile vs neutral vs sad */
+    .avatar-face.happy .avatar-mouth { d: path("M 82 140 Q 110 168 138 140"); }
+    .avatar-face.error .avatar-mouth { d: path("M 84 155 Q 110 140 136 155"); }
+  </style>
+</head>
+<body>
+
+<!-- ── Click-to-begin overlay ──────────────────────────────────────────────── -->
+<div class="start-overlay" id="start-overlay">
+  <button class="start-btn" id="start-btn">🎙️ Click to Begin</button>
+  <p>Microphone and voice output require a click to activate</p>
+</div>
+
+<!-- ── Sidebar ─────────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h1>
+      <span class="dot" id="conn-dot"></span>
+      AI Avatar
+    </h1>
+    <p id="conn-status">Connecting…</p>
+  </div>
+
+  <div class="chat-history" id="chat-history">
+    <!-- Messages injected here -->
+  </div>
+
+  <div class="input-area">
+    <div class="stt-bar" id="stt-bar">
+      <div class="stt-dot"></div>
+      <span class="stt-text" id="stt-interim">Listening…</span>
+      <button class="icon-btn danger" id="stt-cancel-btn" title="Cancel">✕</button>
+    </div>
+    <div class="input-row">
+      <textarea
+        class="text-input"
+        id="text-input"
+        placeholder="Type a message…"
+        rows="1"
+      ></textarea>
+      <button class="icon-btn" id="mic-btn" title="Hold to speak (or click)">🎤</button>
+      <button class="send-btn" id="send-btn" title="Send">➤</button>
+    </div>
+  </div>
+</aside>
+
+<!-- ── Avatar stage ────────────────────────────────────────────────────────── -->
+<main class="main">
+  <div class="avatar-stage">
+    <div class="avatar-glow" id="avatar-glow">
+      <div class="always-on-ring"></div>
+      <!-- SVG Avatar Face -->
+      <svg class="avatar-svg" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <clipPath id="face-clip">
+            <circle cx="110" cy="110" r="100"/>
+          </clipPath>
+          <radialGradient id="skin-grad" cx="50%" cy="40%" r="60%">
+            <stop offset="0%" stop-color="#fde8c8"/>
+            <stop offset="100%" stop-color="#f0b88a"/>
+          </radialGradient>
+          <radialGradient id="iris-grad" cx="40%" cy="35%" r="60%">
+            <stop offset="0%" stop-color="#a78bfa"/>
+            <stop offset="100%" stop-color="#4c3d9e"/>
+          </radialGradient>
+        </defs>
+
+        <!-- Background circle -->
+        <circle cx="110" cy="110" r="108" fill="#1c1f2e" stroke="#2a2d3e" stroke-width="2"/>
+
+        <g class="avatar-face" id="avatar-face" clip-path="url(#face-clip)">
+          <!-- Neck -->
+          <rect x="88" y="195" width="44" height="30" rx="8" fill="url(#skin-grad)"/>
+
+          <!-- Head -->
+          <ellipse cx="110" cy="108" rx="82" ry="90" fill="url(#skin-grad)"/>
+
+          <!-- Hair -->
+          <ellipse cx="110" cy="32" rx="82" ry="38" fill="#2d1b10"/>
+          <rect x="28" y="30" width="20" height="60" rx="10" fill="#2d1b10"/>
+          <rect x="172" y="30" width="20" height="60" rx="10" fill="#2d1b10"/>
+
+          <!-- Ear left -->
+          <ellipse cx="30" cy="108" rx="13" ry="18" fill="url(#skin-grad)"/>
+          <ellipse cx="32" cy="108" rx="7" ry="11" fill="#e8a07a"/>
+          <!-- Ear right -->
+          <ellipse cx="190" cy="108" rx="13" ry="18" fill="url(#skin-grad)"/>
+          <ellipse cx="188" cy="108" rx="7" ry="11" fill="#e8a07a"/>
+
+          <!-- Eyebrows -->
+          <path class="eyebrow eyebrow-left" d="M 67 75 Q 82 68 97 72" stroke="#5a3822" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <path class="eyebrow eyebrow-right" d="M 123 72 Q 138 68 153 75" stroke="#5a3822" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+          <!-- Eyes — left -->
+          <g transform="translate(82, 95)">
+            <!-- White -->
+            <ellipse cx="0" cy="0" rx="16" ry="13" fill="white"/>
+            <!-- Iris -->
+            <g class="iris" id="iris-left">
+              <circle cx="0" cy="0" r="9" fill="url(#iris-grad)"/>
+              <!-- Pupil -->
+              <circle cx="0" cy="0" r="5" fill="#111"/>
+              <!-- Highlight -->
+              <circle cx="-3" cy="-3" r="2.5" fill="white" opacity="0.8"/>
+            </g>
+            <!-- Upper eyelid -->
+            <ellipse class="eye-upper-lid" cx="0" cy="0" rx="16" ry="13" fill="url(#skin-grad)"/>
+            <!-- Lashes hint -->
+            <path d="M -16 0 Q -14 -14 0 -13 Q 14 -14 16 0" fill="#2d1b10" opacity="0.15"/>
+          </g>
+
+          <!-- Eyes — right -->
+          <g transform="translate(138, 95)">
+            <ellipse cx="0" cy="0" rx="16" ry="13" fill="white"/>
+            <g class="iris" id="iris-right">
+              <circle cx="0" cy="0" r="9" fill="url(#iris-grad)"/>
+              <circle cx="0" cy="0" r="5" fill="#111"/>
+              <circle cx="-3" cy="-3" r="2.5" fill="white" opacity="0.8"/>
+            </g>
+            <ellipse class="eye-upper-lid" cx="0" cy="0" rx="16" ry="13" fill="url(#skin-grad)"/>
+            <path d="M -16 0 Q -14 -14 0 -13 Q 14 -14 16 0" fill="#2d1b10" opacity="0.15"/>
+          </g>
+
+          <!-- Nose -->
+          <path d="M 108 108 Q 104 120 100 124 Q 108 130 120 124 Q 116 120 112 108 Z" fill="#e09070" opacity="0.3"/>
+
+          <!-- Cheeks (blush, only visible in happy state) -->
+          <ellipse class="cheek" cx="70"  cy="128" rx="16" ry="10" fill="#f87171" opacity="0.35"/>
+          <ellipse class="cheek" cx="150" cy="128" rx="16" ry="10" fill="#f87171" opacity="0.35"/>
+
+          <!-- Mouth -->
+          <path class="avatar-mouth" id="avatar-mouth"
+                d="M 85 145 Q 110 160 135 145"
+                stroke="#c0607a" stroke-width="3.5" fill="none"
+                stroke-linecap="round"/>
+
+          <!-- Lips hint -->
+          <path d="M 88 143 Q 110 148 132 143" stroke="#d47090" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.5"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="state-label" id="state-label">idle</div>
+
+    <div class="speech-display" id="speech-display"></div>
+
+    <div class="avatar-controls">
+      <button class="ctrl-btn record-btn" id="record-btn">🎤 <span id="record-label">Hold to Speak</span></button>
+      <button class="ctrl-btn always-btn" id="always-btn" title='Say "Aria" to activate'>🎧 <span id="always-label">Always Listening</span></button>
+      <button class="ctrl-btn" id="reset-btn">↺ Reset</button>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── Configuration ─────────────────────────────────────────────────────────────
+const WS_URL = `ws://${location.host}/avatar-ws`;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let ws = null;
+let currentState = 'idle';
+let streamingText = '';
+let streamingMsgEl = null;
+let sttActive = false;
+let recognition = null;
+let ttsUtterance = null;
+let ttsReady = false;          // true after first user gesture (overlay click)
+let pendingTtsText = null;     // greeting queued before gesture
+
+// Always-listening / wake word state
+let alwaysListening = false;   // master toggle
+let wakeRecognition = null;    // SpeechRecognition instance for background wake detection
+let wakeActive = false;        // true while wakeRecognition is running
+let commandPending = false;    // true from wake-word detection until command STT ends
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const startOverlay  = document.getElementById('start-overlay');
+const startBtn      = document.getElementById('start-btn');
+const connDot       = document.getElementById('conn-dot');
+const connStatus    = document.getElementById('conn-status');
+const chatHistory   = document.getElementById('chat-history');
+const textInput     = document.getElementById('text-input');
+const micBtn        = document.getElementById('mic-btn');
+const sendBtn       = document.getElementById('send-btn');
+const sttBar        = document.getElementById('stt-bar');
+const sttInterim    = document.getElementById('stt-interim');
+const sttCancelBtn  = document.getElementById('stt-cancel-btn');
+const avatarGlow    = document.getElementById('avatar-glow');
+const avatarFace    = document.getElementById('avatar-face');
+const avatarMouth   = document.getElementById('avatar-mouth');
+const stateLabel    = document.getElementById('state-label');
+const speechDisplay = document.getElementById('speech-display');
+const recordBtn     = document.getElementById('record-btn');
+const recordLabel   = document.getElementById('record-label');
+const alwaysBtn     = document.getElementById('always-btn');
+const alwaysLabel   = document.getElementById('always-label');
+const resetBtn      = document.getElementById('reset-btn');
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connect() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    connDot.className = 'dot connected';
+    connStatus.textContent = 'Connected';
+  };
+
+  ws.onclose = () => {
+    connDot.className = 'dot error';
+    connStatus.textContent = 'Disconnected — reconnecting…';
+    setAvatarState('idle');
+    setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => {
+    connStatus.textContent = 'Connection error';
+  };
+
+  ws.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    handleServerEvent(msg);
+  };
+}
+
+// ── Server event handler ──────────────────────────────────────────────────────
+function handleServerEvent(msg) {
+  const type = msg.type;
+
+  if (type === 'session.created') {
+    connStatus.textContent = `Session ${msg.session_id.slice(0, 8)}`;
+
+  } else if (type === 'output.avatar_state') {
+    setAvatarState(msg.state);
+
+  } else if (type === 'output.text_delta') {
+    handleTextDelta(msg.delta, msg.index);
+
+  } else if (type === 'output.text_done') {
+    handleTextDone(msg.text);
+
+  } else if (type === 'output.speaking_done') {
+    // TTS should already be playing; nothing extra needed
+    // Avatar transitions to idle will come via output.avatar_state
+
+  } else if (type === 'output.task_delegated') {
+    appendSystemMsg(`Delegating: ${msg.task} → ${msg.agent}`);
+
+  } else if (type === 'output.task_result') {
+    appendSystemMsg(`Result: ${msg.result}`);
+
+  } else if (type === 'output.error') {
+    setAvatarState('error');
+    appendSystemMsg(`Error [${msg.code}]: ${msg.message}`);
+    setTimeout(() => setAvatarState('idle'), 3000);
+
+  } else if (type === 'session.reset') {
+    chatHistory.innerHTML = '';
+    speechDisplay.textContent = '';
+    speechDisplay.classList.remove('visible');
+
+  } else if (type === 'session.ping') {
+    send({ type: 'session.ping', ts: msg.ts });
+  }
+}
+
+// ── Avatar state machine ──────────────────────────────────────────────────────
+function setAvatarState(state) {
+  currentState = state;
+  // Glow ring
+  avatarGlow.className = `avatar-glow ${state !== 'idle' ? state : ''}`;
+  // SVG face classes
+  avatarFace.className = `avatar-face ${state}`;
+  // Mouth animation
+  if (state === 'speaking') {
+    avatarMouth.classList.add('speaking');
+  } else {
+    avatarMouth.classList.remove('speaking');
+  }
+  // Iris wander
+  document.querySelectorAll('.iris').forEach(el => {
+    if (state === 'thinking') {
+      el.classList.add('thinking');
+    } else {
+      el.classList.remove('thinking');
+    }
+  });
+  // State label
+  stateLabel.textContent = state;
+  stateLabel.className = `state-label ${state}`;
+}
+
+// ── Text streaming ────────────────────────────────────────────────────────────
+function handleTextDelta(delta, index) {
+  if (index === 0) {
+    // First delta — create assistant bubble
+    streamingText = '';
+    streamingMsgEl = addMessage('assistant', '');
+    streamingMsgEl.querySelector('.msg-bubble').classList.add('streaming');
+    // Show speech display
+    speechDisplay.textContent = '';
+    speechDisplay.classList.add('visible');
+  }
+  streamingText += delta;
+  if (streamingMsgEl) {
+    streamingMsgEl.querySelector('.msg-bubble').textContent = streamingText;
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+  }
+  speechDisplay.textContent = streamingText;
+}
+
+function handleTextDone(text) {
+  // Finalize bubble
+  if (streamingMsgEl) {
+    const bubble = streamingMsgEl.querySelector('.msg-bubble');
+    bubble.textContent = text;
+    bubble.classList.remove('streaming');
+    streamingMsgEl = null;
+  }
+  streamingText = '';
+  // Speak with TTS
+  speakText(text);
+}
+
+// ── Chat history ──────────────────────────────────────────────────────────────
+function addMessage(role, text) {
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML = `
+    <span class="msg-label">${role === 'user' ? 'You' : 'Avatar'}</span>
+    <div class="msg-bubble">${escHtml(text)}</div>
+  `;
+  chatHistory.appendChild(div);
+  chatHistory.scrollTop = chatHistory.scrollHeight;
+  return div;
+}
+
+function appendSystemMsg(text) {
+  const div = document.createElement('div');
+  div.style.cssText = 'text-align:center;font-size:11px;color:var(--text-faint);padding:4px 0;';
+  div.textContent = text;
+  chatHistory.appendChild(div);
+  chatHistory.scrollTop = chatHistory.scrollHeight;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Send message ──────────────────────────────────────────────────────────────
+function sendText(text) {
+  if (!text.trim() || !ws || ws.readyState !== WebSocket.OPEN) return;
+  addMessage('user', text);
+  speechDisplay.classList.remove('visible');
+  send({ type: 'input.text_message', text: text.trim() });
+}
+
+function send(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(obj));
+  }
+}
+
+// ── TTS ───────────────────────────────────────────────────────────────────────
+
+// Chrome pause-bug watchdog: resume if TTS gets stuck in paused state
+setInterval(() => {
+  if (window.speechSynthesis && window.speechSynthesis.paused) {
+    window.speechSynthesis.resume();
+  }
+}, 5000);
+
+function _preferredVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  return (
+    voices.find(v => /samantha|karen|victoria|moira/i.test(v.name)) ||
+    voices.find(v => v.lang === 'en-US' && v.localService) ||
+    voices.find(v => v.lang === 'en-GB' && v.localService) ||
+    voices.find(v => v.lang.startsWith('en') && v.localService) ||
+    voices.find(v => v.lang.startsWith('en')) ||
+    voices[0] ||
+    null
+  );
+}
+
+function speakText(text) {
+  if (!window.speechSynthesis) return;
+
+  // Gate on user gesture — queue text if TTS not yet unlocked
+  if (!ttsReady) {
+    pendingTtsText = text;
+    return;
+  }
+
+  // cancel() → speak() must have a gap or Chrome gets stuck in paused state
+  window.speechSynthesis.cancel();
+  setTimeout(() => {
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate  = 1.0;
+    utter.pitch = 1.05;
+    utter.volume = 1.0;
+
+    const voice = _preferredVoice();
+    if (voice) utter.voice = voice;
+
+    utter.onend = () => {
+      speechDisplay.classList.remove('visible');
+      // Resume wake-word detection once Aria finishes speaking
+      if (alwaysListening && !sttActive && !commandPending) {
+        setTimeout(startWakeWordDetection, 300);
+      }
+    };
+
+    utter.onerror = (e) => {
+      // 'interrupted' fires when cancel() is called mid-speech — not an error
+      if (e.error !== 'interrupted') {
+        console.warn('TTS error:', e.error);
+      }
+    };
+
+    ttsUtterance = utter;
+    window.speechSynthesis.speak(utter);
+  }, 80);
+}
+
+// ── Speech recognition ────────────────────────────────────────────────────────
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function startSTT() {
+  if (!SpeechRecognition) {
+    alert('Speech recognition is not supported in this browser. Please use Chrome.');
+    return;
+  }
+  if (sttActive) return;
+  sttActive = true;
+
+  // Stop any ongoing TTS
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+
+  recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
+  recognition.onstart = () => {
+    sttBar.classList.add('active');
+    send({ type: 'input.speech_started' });
+    setAvatarState('listening');
+    recordBtn.classList.add('active');
+    recordLabel.textContent = 'Listening…';
+  };
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    let final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t;
+      else interim += t;
+    }
+    if (interim) sttInterim.textContent = interim;
+    if (final) {
+      send({ type: 'input.speech_transcription', text: final, is_final: true });
+      addMessage('user', final);
+      speechDisplay.classList.remove('visible');
+    }
+  };
+
+  recognition.onerror = (e) => {
+    console.warn('STT error:', e.error);
+    stopSTT();
+  };
+
+  recognition.onend = () => {
+    stopSTT();
+  };
+
+  recognition.start();
+}
+
+function stopSTT() {
+  sttActive = false;
+  commandPending = false;
+  sttBar.classList.remove('active');
+  sttInterim.textContent = 'Listening…';
+  recordBtn.classList.remove('active');
+  recordLabel.textContent = 'Hold to Speak';
+  send({ type: 'input.speech_stopped' });
+  if (recognition) {
+    try { recognition.stop(); } catch {}
+    recognition = null;
+  }
+  if (currentState === 'listening') setAvatarState('idle');
+  // Resume background wake-word detection when in always-listening mode
+  if (alwaysListening) {
+    setTimeout(startWakeWordDetection, 500);
+  }
+}
+
+// ── Always-listening / wake word ──────────────────────────────────────────────
+
+function toggleAlwaysListening() {
+  if (!SpeechRecognition) {
+    alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+    return;
+  }
+  alwaysListening = !alwaysListening;
+  if (alwaysListening) {
+    alwaysBtn.classList.add('active');
+    alwaysLabel.textContent = 'Listening for "Aria"…';
+    avatarGlow.classList.add('always-on');
+    startWakeWordDetection();
+  } else {
+    alwaysBtn.classList.remove('active');
+    alwaysLabel.textContent = 'Always Listening';
+    avatarGlow.classList.remove('always-on');
+    stopWakeWordDetection();
+  }
+}
+
+function startWakeWordDetection() {
+  if (!SpeechRecognition) return;
+  if (wakeActive || sttActive || commandPending) return;
+
+  wakeActive = true;
+  wakeRecognition = new SpeechRecognition();
+  wakeRecognition.continuous = true;
+  wakeRecognition.interimResults = true;
+  wakeRecognition.lang = 'en-US';
+
+  wakeRecognition.onresult = (event) => {
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript.toLowerCase().trim();
+      // Match "aria" as a word (handles "aria", "hey aria", "aria,", etc.)
+      if (/\baria\b/.test(transcript)) {
+        onWakeWordDetected();
+        return;
+      }
+    }
+  };
+
+  // Chrome stops continuous recognition after ~60s of no speech — auto-restart
+  wakeRecognition.onend = () => {
+    wakeActive = false;
+    if (alwaysListening && !commandPending && !sttActive) {
+      setTimeout(startWakeWordDetection, 350);
+    }
+  };
+
+  wakeRecognition.onerror = (e) => {
+    // 'no-speech' and 'aborted' are non-fatal — just restart
+    if (e.error !== 'no-speech' && e.error !== 'aborted') {
+      console.warn('Wake recognition error:', e.error);
+    }
+    wakeActive = false;
+    if (alwaysListening && !commandPending && !sttActive) {
+      setTimeout(startWakeWordDetection, 600);
+    }
+  };
+
+  try {
+    wakeRecognition.start();
+  } catch (e) {
+    wakeActive = false;
+  }
+}
+
+function stopWakeWordDetection() {
+  wakeActive = false;
+  if (wakeRecognition) {
+    try { wakeRecognition.stop(); } catch {}
+    wakeRecognition = null;
+  }
+}
+
+function onWakeWordDetected() {
+  if (sttActive || commandPending) return;  // already handling a command
+  commandPending = true;
+  stopWakeWordDetection();
+
+  // Flash the avatar glow green
+  avatarGlow.classList.add('wake-flash');
+  setTimeout(() => avatarGlow.classList.remove('wake-flash'), 500);
+
+  // Interrupt any ongoing TTS or response
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (currentState === 'speaking' || currentState === 'thinking') {
+    send({ type: 'input.interrupt' });
+  }
+
+  // Play a two-tone chime to signal activation
+  playWakeChime();
+
+  // Short delay so chime plays before mic opens
+  setTimeout(startSTT, 380);
+}
+
+function playWakeChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Two ascending sine tones: C5 (523 Hz) → E5 (659 Hz)
+    [
+      { freq: 523.25, start: 0.00, end: 0.13 },
+      { freq: 659.25, start: 0.13, end: 0.28 },
+    ].forEach(({ freq, start, end }) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+      gain.gain.setValueAtTime(0, ctx.currentTime + start);
+      gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + start + 0.025);
+      gain.gain.linearRampToValueAtTime(0,    ctx.currentTime + end);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + end);
+    });
+    setTimeout(() => { try { ctx.close(); } catch {} }, 600);
+  } catch (e) {
+    // AudioContext not available — silently skip chime
+  }
+}
+
+// ── Event listeners ───────────────────────────────────────────────────────────
+
+// Debounce guard — prevents double-fire from Enter triggering both
+// the keydown handler and a button click event within the same frame.
+let _sendDebounce = 0;
+function trySend() {
+  const now = Date.now();
+  if (now - _sendDebounce < 300) return;   // ignore if fired within 300 ms
+  _sendDebounce = now;
+  const text = textInput.value.trim();
+  if (text) {
+    sendText(text);
+    textInput.value = '';
+    textInput.style.height = '44px';
+  }
+}
+
+// Send button
+sendBtn.addEventListener('click', trySend);
+
+// Enter to send (Shift+Enter for newline)
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    trySend();
+  }
+});
+
+// Auto-resize textarea
+textInput.addEventListener('input', () => {
+  textInput.style.height = '44px';
+  textInput.style.height = Math.min(textInput.scrollHeight, 100) + 'px';
+});
+
+// Mic button — toggle STT
+micBtn.addEventListener('click', () => {
+  if (sttActive) stopSTT();
+  else startSTT();
+});
+micBtn.addEventListener('mouseenter', () => { if (!sttActive) micBtn.classList.add('active'); });
+micBtn.addEventListener('mouseleave', () => { if (!sttActive) micBtn.classList.remove('active'); });
+
+// STT cancel
+sttCancelBtn.addEventListener('click', stopSTT);
+
+// Record button (voice control on avatar side)
+recordBtn.addEventListener('click', () => {
+  if (sttActive) stopSTT();
+  else startSTT();
+});
+
+// Click-to-begin overlay — unlocks TTS (required browser user-gesture gate)
+startBtn.addEventListener('click', () => {
+  ttsReady = true;
+  startOverlay.classList.add('hidden');
+  if (pendingTtsText) {
+    speakText(pendingTtsText);
+    pendingTtsText = null;
+  }
+  // If the user already toggled always-listening before clicking begin, start now
+  if (alwaysListening) startWakeWordDetection();
+});
+
+// Always-listening toggle
+alwaysBtn.addEventListener('click', () => {
+  if (!ttsReady) {
+    // Require the user-gesture gate first (overlay must be dismissed)
+    startBtn.click();
+    return;
+  }
+  toggleAlwaysListening();
+});
+
+// Reset button
+resetBtn.addEventListener('click', () => {
+  send({ type: 'input.reset_conversation' });
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  setAvatarState('idle');
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+connect();
+</script>
+</body>
+</html>
